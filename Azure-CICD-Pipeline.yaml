@@ -1,0 +1,122 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+pool:
+  name: Default
+  vmImage: 'Rishi-VM'
+
+stages:
+  - stage:
+    displayName: Validating Terraform-Script
+    jobs:
+      - job:
+        steps:
+          - task: TerraformInstaller@1
+            displayName: Terraform Installation
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: TerraformTaskV4@4
+            displayName: Terraform-Init
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/Main'
+              backendServiceArm: 'Rishi-Principal-Connection'
+              backendAzureRmResourceGroupName: 'Rishi-Learning'
+              backendAzureRmStorageAccountName: 'terraformstatefiless'
+              backendAzureRmContainerName: 'terraform-sf'
+              backendAzureRmKey: 'dev-env.tfstate'
+
+          - task: TerraformTaskV4@4
+            displayName: Validating Terraform Script
+            inputs:
+              provider: 'azurerm'
+              command: 'validate'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/Main'
+
+  - stage: 
+    displayName: Planning-Infrastrucutre
+    jobs:
+      - job: 
+        steps:
+          - task: TerraformInstaller@1
+            displayName: Installing Terraform
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: TerraformTaskV4@4
+            displayName: Terraform-Init
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/Main'
+              backendServiceArm: 'Rishi-Principal-Connection'
+              backendAzureRmResourceGroupName: 'Rishi-Learning'
+              backendAzureRmStorageAccountName: 'terraformstatefiless'
+              backendAzureRmContainerName: 'terraform-sf'
+              backendAzureRmKey: 'dev-env.tfstate'
+
+          - task: TerraformTaskV4@4
+            displayName: Terraform-Plan
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/Main'
+              commandOptions: -out="plan.out"
+              environmentServiceNameAzureRM: 'Rishi-Principal-Connection'    
+
+          - task: CopyFiles@2
+            displayName: Copying Files
+            inputs:
+              Contents: |
+                **/*
+                !.terraform/**/
+              TargetFolder: '$(build.artifactstagingdirectory)/artifacts'
+
+          - task: PublishBuildArtifacts@1
+            displayName: Publishing Artifacts
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/artifacts'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'    
+
+  - stage: 
+    displayName: Infrastrucutre Provison
+    jobs:
+    - deployment: Terraform_Apply
+      environment: 'Deployment-Approval'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - task: TerraformInstaller@1
+                displayName: Installing Terraform
+                inputs:
+                  terraformVersion: 'latest'
+
+              - task: TerraformTaskV4@4
+                displayName: Terraform-Init
+                inputs:
+                  provider: 'azurerm'
+                  command: 'init'
+                  workingDirectory: '$(System.DefaultWorkingDirectory)/Main'
+                  backendServiceArm: 'Rishi-Principal-Connection'
+                  backendAzureRmResourceGroupName: 'Rishi-Learning'
+                  backendAzureRmStorageAccountName: 'terraformstatefiless'
+                  backendAzureRmContainerName: 'terraform-sf'
+                  backendAzureRmKey: 'dev-env.tfstate'
+              
+              - task: TerraformTaskV4@4
+                displayName: Terraform-Apply
+                inputs:
+                  provider: 'azurerm'
+                  command: 'apply'
+                  workingDirectory: '$(System.DefaultWorkingDirectory)/Main'
+                  environmentServiceNameAzureRM: 'Rishi-Principal-Connection'
+              
